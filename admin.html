@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -17,15 +16,40 @@
     }
     th { background-color: #f0f0f0; }
     .filter-area { margin-bottom: 20px; text-align: center; }
+    .status { 
+      padding: 5px 10px; 
+      border-radius: 3px; 
+      font-size: 12px; 
+      font-weight: bold; 
+    }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+    .warning { background: #fff3cd; color: #856404; }
+    .loading { background: #d1ecf1; color: #0c5460; }
+    button { 
+      padding: 8px 16px; 
+      margin: 5px; 
+      border: none; 
+      border-radius: 4px; 
+      cursor: pointer; 
+      font-size: 14px; 
+    }
+    button:hover { opacity: 0.8; }
+    .btn-primary { background: #007bff; color: white; }
+    .btn-success { background: #28a745; color: white; }
+    .btn-info { background: #17a2b8; color: white; }
+    #statusMessage { margin: 10px 0; padding: 10px; border-radius: 4px; }
   </style>
 </head>
 <body>
   <h2>허그핏 관리자 출석 페이지</h2>
 
+  <div id="statusMessage" style="display: none;"></div>
+
   <div class="filter-area">
     <label for="search">고객 이름 검색:</label>
     <input type="text" id="search" placeholder="예: 김민정">
-    <button onclick="searchMember()">검색</button>
+    <button class="btn-info" onclick="searchMember()">검색</button>
 
     <br><br>
     <label>등록 유형:</label>
@@ -48,8 +72,9 @@
       </select>
     </span>
 
-    <button onclick="registerCustomer()">고객 등록</button>
-    <button onclick="markVisit()">출석 처리</button>
+    <button class="btn-primary" onclick="registerCustomer()">고객 등록</button>
+    <button class="btn-success" onclick="markVisit()">출석 처리</button>
+    <button class="btn-info" onclick="loadAllMembers()">전체 회원 조회</button>
   </div>
 
   <table>
@@ -59,114 +84,14 @@
         <th>등록일자</th>
         <th>최근방문일</th>
         <th>남은횟수/기간</th>
+        <th>상태</th>
       </tr>
     </thead>
     <tbody id="resultBody"></tbody>
   </table>
 
   <script>
-    const SHEET_URL = "https://script.google.com/macros/s/AKfycbxLTWdd05Qc1VF4VjnjgaObWSnQrsHeKtOWHJQAMrN59fgJ5xczlZlALaywwWZJeVW1kg/exec";
-
-    function toggleOptions() {
-      const type = document.getElementById("regType").value;
-      document.getElementById("couponOptions").style.display = type === '쿠폰' ? 'inline' : 'none';
-      document.getElementById("periodOptions").style.display = type === '기간' ? 'inline' : 'none';
-    }
-
-    function registerCustomer() {
-      const name = prompt("등록할 고객명을 입력해주세요:");
-      if (!name) return;
-      const now = new Date();
-      const regType = document.getElementById("regType").value;
-
-      let info = {
-        name: name,
-        regDate: now.toISOString().split('T')[0],
-        lastVisit: '',
-        type: regType
-      };
-
-      if (regType === '쿠폰') {
-        const val = document.getElementById("couponSelect").value;
-        const count = parseInt(val.split("회")[0]);
-        info.count = count;
-      } else {
-        const period = document.getElementById("periodSelect").value;
-        const days = parseInt(period.replace("개월", '')) * 30;
-        const expireDate = new Date(now.getTime() + days * 24*60*60*1000);
-        info.expire = expireDate.toISOString().split('T')[0];
-      }
-
-      localStorage.setItem(`member_${name}`, JSON.stringify(info));
-      alert("고객 등록 완료");
-
-      fetch(SHEET_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name,
-          regDate: info.regDate,
-          lastVisit: '',
-          type: info.type,
-          status: info.type === '쿠폰' ? `${info.count}회` : `~ ${info.expire}`
-        })
-      });
-    }
-
-    function searchMember() {
-      const name = document.getElementById("search").value.trim();
-      const tbody = document.getElementById("resultBody");
-      tbody.innerHTML = '';
-
-      if (!name) return alert("고객명을 입력해주세요");
-
-      const key = `member_${name}`;
-      const data = localStorage.getItem(key);
-      if (!data) return alert("등록된 고객 정보가 없습니다");
-
-      const info = JSON.parse(data);
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${info.name}</td>
-        <td>${info.regDate}</td>
-        <td>${info.lastVisit || '-'}</td>
-        <td>${info.type === '쿠폰' ? `${info.count}회` : `~ ${info.expire}`}</td>
-      `;
-      tbody.appendChild(row);
-    }
-
-    function markVisit() {
-      const name = document.getElementById("search").value.trim();
-      if (!name) return alert("고객명을 입력해주세요");
-
-      const key = `member_${name}`;
-      const data = localStorage.getItem(key);
-      if (!data) return alert("등록된 고객 정보가 없습니다");
-
-      const info = JSON.parse(data);
-      const today = new Date().toISOString().split('T')[0];
-      info.lastVisit = today;
-
-      if (info.type === '쿠폰') {
-        if (info.count > 0) info.count--;
-      }
-
-      localStorage.setItem(key, JSON.stringify(info));
-      alert("출석 처리 완료");
-      searchMember();
-
-      fetch(SHEET_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name,
-          regDate: info.regDate,
-          lastVisit: today,
-          type: info.type,
-          status: info.type === '쿠폰' ? `${info.count}회` : `~ ${info.expire}`
-        })
-      });
-    }
+    const SHEET_URL = "https://script.google.com/macros/s/AKfycbxsa0wxqGaMwyz0QPrecdagFJid2VUxSuvKYRf67LP-zqrgiWtJECSxN-DYfErmI5dyOg/exec";
   </script>
 </body>
 </html>
