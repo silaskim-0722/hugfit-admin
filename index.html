@@ -98,7 +98,7 @@
     </select>
 
     <span id="couponOptions">
-      <select id="couponSelect">
+      <select id="couponSelect" onchange="toggleCustomInput()">
         <option value="10회_1개월">한달 10회</option>
         <option value="30회_3개월">30회 3개월</option>
         <option value="custom">직접입력</option>
@@ -107,7 +107,7 @@
     </span>
 
     <span id="periodOptions" style="display: none;">
-      <select id="periodSelect">
+      <select id="periodSelect" onchange="toggleCustomInput()">
         <option value="1개월">1개월</option>
         <option value="3개월">3개월</option>
         <option value="6개월">6개월</option>
@@ -139,179 +139,161 @@
   </table>
 
   <script>
-    // API URL
-    const API_URL = 'https://script.google.com/macros/s/AKfycbw3UXzSQbI6jIIVEbUYMCaHKQS4izqki9kJXO5oOORcKyid6tpofsFKtsE9K433IN2Ulw/exec';
+    // 전역 변수
+    var API_URL = 'https://script.google.com/macros/s/AKfycbw3UXzSQbI6jIIVEbUYMCaHKQS4izqki9kJXO5oOORcKyid6tpofsFKtsE9K433IN2Ulw/exec';
     
     // 상태 메시지 표시 함수
-    function showStatus(message, type = 'info', showSpinner = false) {
-      const statusDiv = document.getElementById('statusMessage');
-      const spinnerHtml = showSpinner ? '<div class="loading-spinner"></div>' : '';
+    function showStatus(message, type, showSpinner) {
+      var statusDiv = document.getElementById('statusMessage');
+      var spinnerHtml = showSpinner ? '<div class="loading-spinner"></div>' : '';
       statusDiv.innerHTML = spinnerHtml + message;
-      statusDiv.className = `status ${type}`;
+      statusDiv.className = 'status ' + (type || 'info');
       statusDiv.style.display = 'block';
       
       if (!showSpinner) {
-        setTimeout(() => {
+        setTimeout(function() {
           statusDiv.style.display = 'none';
         }, 3000);
       }
     }
 
     // 동기화 상태 표시
-    function showSyncStatus(message, type = 'info') {
-      const syncDiv = document.getElementById('syncStatus');
+    function showSyncStatus(message, type) {
+      var syncDiv = document.getElementById('syncStatus');
       syncDiv.textContent = message;
-      syncDiv.className = `sync-status ${type}`;
+      syncDiv.className = 'sync-status ' + (type || 'info');
       syncDiv.style.display = 'block';
       
-      setTimeout(() => {
+      setTimeout(function() {
         syncDiv.style.display = 'none';
       }, 2000);
     }
 
     // 마지막 동기화 시간 업데이트
     function updateLastSync() {
-      const now = new Date();
-      const timeString = now.toLocaleTimeString('ko-KR');
+      var now = new Date();
+      var timeString = now.toLocaleTimeString('ko-KR');
       document.getElementById('lastSync').textContent = timeString;
-    }
-
-    // API 호출 함수
-    async function callAPI(action, data = {}) {
-      try {
-        const response = await fetch(API_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: new URLSearchParams({
-            action: action,
-            ...data
-          })
-        });
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        return result;
-      } catch (error) {
-        console.error('API 호출 오류:', error);
-        throw error;
-      }
     }
 
     // 버튼 상태 제어
     function setButtonsEnabled(enabled) {
-      const buttons = ['registerBtn', 'visitBtn', 'loadAllBtn', 'todayBtn'];
-      buttons.forEach(id => {
-        const btn = document.getElementById(id);
+      var buttons = ['registerBtn', 'visitBtn', 'loadAllBtn', 'todayBtn'];
+      for (var i = 0; i < buttons.length; i++) {
+        var btn = document.getElementById(buttons[i]);
         if (btn) {
           btn.disabled = !enabled;
         }
-      });
+      }
     }
 
     function toggleOptions() {
-      const type = document.getElementById("regType").value;
+      var type = document.getElementById("regType").value;
       document.getElementById("couponOptions").style.display = type === '쿠폰' ? 'inline' : 'none';
       document.getElementById("periodOptions").style.display = type === '기간' ? 'inline' : 'none';
-      
-      // 커스텀 입력 필드 토글
       toggleCustomInput();
     }
 
     function toggleCustomInput() {
-      const regType = document.getElementById("regType").value;
+      var regType = document.getElementById("regType").value;
       
       if (regType === '쿠폰') {
-        const couponValue = document.getElementById("couponSelect").value;
+        var couponValue = document.getElementById("couponSelect").value;
         document.getElementById("customCount").style.display = couponValue === 'custom' ? 'inline' : 'none';
       } else {
-        const periodValue = document.getElementById("periodSelect").value;
+        var periodValue = document.getElementById("periodSelect").value;
         document.getElementById("customPeriod").style.display = periodValue === 'custom' ? 'inline' : 'none';
       }
     }
 
-    // 이벤트 리스너 등록
-    document.getElementById("couponSelect").addEventListener("change", toggleCustomInput);
-    document.getElementById("periodSelect").addEventListener("change", toggleCustomInput);
-
-    async function registerCustomer() {
-      const name = prompt("등록할 고객명을 입력해주세요:");
+    function registerCustomer() {
+      var name = prompt("등록할 고객명을 입력해주세요:");
       if (!name || !name.trim()) return;
       
-      const trimmedName = name.trim();
+      var trimmedName = name.trim();
       
       setButtonsEnabled(false);
       showStatus("고객 등록 중...", "loading", true);
       
-      try {
-        const regType = document.getElementById("regType").value;
-        let memberData = {
-          name: trimmedName,
-          type: regType
-        };
+      var regType = document.getElementById("regType").value;
+      var memberData = {
+        action: 'registerMember',
+        name: trimmedName,
+        type: regType
+      };
 
-        if (regType === '쿠폰') {
-          const couponValue = document.getElementById("couponSelect").value;
-          let count;
-          
-          if (couponValue === 'custom') {
-            count = parseInt(document.getElementById("customCount").value);
-            if (!count || count <= 0) {
-              showStatus("올바른 횟수를 입력해주세요.", "warning");
-              setButtonsEnabled(true);
-              return;
-            }
-          } else {
-            count = parseInt(couponValue.split("회")[0]);
-          }
-          
-          memberData.count = count;
-        } else {
-          const periodValue = document.getElementById("periodSelect").value;
-          let months;
-          
-          if (periodValue === 'custom') {
-            months = parseInt(document.getElementById("customPeriod").value);
-            if (!months || months <= 0) {
-              showStatus("올바른 기간을 입력해주세요.", "warning");
-              setButtonsEnabled(true);
-              return;
-            }
-          } else {
-            months = parseInt(periodValue.replace("개월", ''));
-          }
-          
-          memberData.months = months;
-        }
-
-        const result = await callAPI('registerMember', memberData);
+      if (regType === '쿠폰') {
+        var couponValue = document.getElementById("couponSelect").value;
+        var count;
         
+        if (couponValue === 'custom') {
+          count = parseInt(document.getElementById("customCount").value);
+          if (!count || count <= 0) {
+            showStatus("올바른 횟수를 입력해주세요.", "warning");
+            setButtonsEnabled(true);
+            return;
+          }
+        } else {
+          count = parseInt(couponValue.split("회")[0]);
+        }
+        
+        memberData.count = count;
+      } else {
+        var periodValue = document.getElementById("periodSelect").value;
+        var months;
+        
+        if (periodValue === 'custom') {
+          months = parseInt(document.getElementById("customPeriod").value);
+          if (!months || months <= 0) {
+            showStatus("올바른 기간을 입력해주세요.", "warning");
+            setButtonsEnabled(true);
+            return;
+          }
+        } else {
+          months = parseInt(periodValue.replace("개월", ''));
+        }
+        
+        memberData.months = months;
+      }
+
+      // 폼 데이터 생성
+      var formData = new FormData();
+      for (var key in memberData) {
+        formData.append(key, memberData[key]);
+      }
+
+      fetch(API_URL, {
+        method: 'POST',
+        body: formData
+      })
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(result) {
         if (result.success) {
-          showStatus(`${trimmedName} 고객 등록이 완료되었습니다.`, "success");
+          showStatus(trimmedName + " 고객 등록이 완료되었습니다.", "success");
           showSyncStatus("✅ 구글 시트에 저장됨", "success");
           updateLastSync();
           
           // 등록 후 자동 검색
           document.getElementById("search").value = trimmedName;
-          setTimeout(() => searchMember(), 500);
+          setTimeout(function() {
+            searchMember();
+          }, 500);
         } else {
-          showStatus(`등록 실패: ${result.error || '알 수 없는 오류'}`, "error");
+          showStatus("등록 실패: " + (result.error || '알 수 없는 오류'), "error");
         }
-        
-      } catch (error) {
+        setButtonsEnabled(true);
+      })
+      .catch(function(error) {
         console.error('등록 실패:', error);
         showStatus("서버 연결 오류가 발생했습니다. 잠시 후 다시 시도해주세요.", "error");
-      } finally {
         setButtonsEnabled(true);
-      }
+      });
     }
 
-    async function searchMember() {
-      const name = document.getElementById('search').value.trim();
+    function searchMember() {
+      var name = document.getElementById('search').value.trim();
       if (!name) {
         showStatus("검색할 고객명을 입력해주세요.", "warning");
         return;
@@ -320,110 +302,154 @@
       setButtonsEnabled(false);
       showStatus("검색 중...", "loading", true);
       
-      try {
-        const result = await callAPI('searchMember', { name: name });
-        
+      var formData = new FormData();
+      formData.append('action', 'searchMember');
+      formData.append('name', name);
+
+      fetch(API_URL, {
+        method: 'POST',
+        body: formData
+      })
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(result) {
         if (result.success) {
           displayMembers(result.data);
-          showStatus(`"${name}" 검색 결과: ${result.data.length}명`, "success");
+          showStatus("\"" + name + "\" 검색 결과: " + result.data.length + "명", "success");
           updateLastSync();
         } else {
-          showStatus(`검색 실패: ${result.error || '알 수 없는 오류'}`, "error");
+          showStatus("검색 실패: " + (result.error || '알 수 없는 오류'), "error");
         }
-        
-      } catch (error) {
+        setButtonsEnabled(true);
+      })
+      .catch(function(error) {
         console.error('검색 실패:', error);
         showStatus("서버 연결 오류가 발생했습니다.", "error");
-      } finally {
         setButtonsEnabled(true);
-      }
+      });
     }
 
-    async function markVisit() {
-      const name = prompt("출석 처리할 고객명을 입력해주세요:");
+    function markVisit() {
+      var name = prompt("출석 처리할 고객명을 입력해주세요:");
       if (!name || !name.trim()) return;
       
-      const trimmedName = name.trim();
+      var trimmedName = name.trim();
       
       setButtonsEnabled(false);
       showStatus("출석 처리 중...", "loading", true);
       
-      try {
-        const result = await callAPI('markVisit', { name: trimmedName });
-        
+      var formData = new FormData();
+      formData.append('action', 'markVisit');
+      formData.append('name', trimmedName);
+
+      fetch(API_URL, {
+        method: 'POST',
+        body: formData
+      })
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(result) {
         if (result.success) {
-          showStatus(`${trimmedName} 고객의 출석이 처리되었습니다.`, "success");
+          showStatus(trimmedName + " 고객의 출석이 처리되었습니다.", "success");
           showSyncStatus("✅ 구글 시트에 저장됨", "success");
           updateLastSync();
           
           // 출석 처리 후 자동 검색
           document.getElementById("search").value = trimmedName;
-          setTimeout(() => searchMember(), 500);
+          setTimeout(function() {
+            searchMember();
+          }, 500);
         } else {
-          showStatus(`출석 처리 실패: ${result.error || '알 수 없는 오류'}`, "error");
+          showStatus("출석 처리 실패: " + (result.error || '알 수 없는 오류'), "error");
         }
-        
-      } catch (error) {
+        setButtonsEnabled(true);
+      })
+      .catch(function(error) {
         console.error('출석 처리 실패:', error);
         showStatus("서버 연결 오류가 발생했습니다.", "error");
-      } finally {
         setButtonsEnabled(true);
-      }
+      });
     }
 
-    async function loadAllMembers() {
+    function loadAllMembers() {
       setButtonsEnabled(false);
       showStatus("전체 회원 조회 중...", "loading", true);
       
-      try {
-        const result = await callAPI('getAllMembers');
-        
+      var formData = new FormData();
+      formData.append('action', 'getAllMembers');
+
+      fetch(API_URL, {
+        method: 'POST',
+        body: formData
+      })
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(result) {
         if (result.success) {
           displayMembers(result.data);
-          showStatus(`전체 회원: ${result.data.length}명`, "success");
+          showStatus("전체 회원: " + result.data.length + "명", "success");
           updateLastSync();
         } else {
-          showStatus(`조회 실패: ${result.error || '알 수 없는 오류'}`, "error");
+          showStatus("조회 실패: " + (result.error || '알 수 없는 오류'), "error");
         }
-        
-      } catch (error) {
+        setButtonsEnabled(true);
+      })
+      .catch(function(error) {
         console.error('전체 회원 조회 실패:', error);
         showStatus("서버 연결 오류가 발생했습니다.", "error");
-      } finally {
         setButtonsEnabled(true);
-      }
+      });
     }
 
-    async function loadTodayVisitors() {
+    function loadTodayVisitors() {
       setButtonsEnabled(false);
       showStatus("오늘 출석자 조회 중...", "loading", true);
       
-      try {
-        const result = await callAPI('getTodayVisitors');
-        
+      var formData = new FormData();
+      formData.append('action', 'getTodayVisitors');
+
+      fetch(API_URL, {
+        method: 'POST',
+        body: formData
+      })
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(result) {
         if (result.success) {
           displayMembers(result.data);
-          showStatus(`오늘 출석자: ${result.data.length}명`, "success");
+          showStatus("오늘 출석자: " + result.data.length + "명", "success");
           updateLastSync();
         } else {
-          showStatus(`조회 실패: ${result.error || '알 수 없는 오류'}`, "error");
+          showStatus("조회 실패: " + (result.error || '알 수 없는 오류'), "error");
         }
-        
-      } catch (error) {
+        setButtonsEnabled(true);
+      })
+      .catch(function(error) {
         console.error('오늘 출석자 조회 실패:', error);
         showStatus("서버 연결 오류가 발생했습니다.", "error");
-      } finally {
         setButtonsEnabled(true);
-      }
+      });
     }
 
-    async function refreshData() {
+    function refreshData() {
       showStatus("데이터 새로고침 중...", "loading", true);
       showSyncStatus("🔄 동기화 중...", "loading");
       
-      try {
-        const result = await callAPI('refreshData');
-        
+      var formData = new FormData();
+      formData.append('action', 'refreshData');
+
+      fetch(API_URL, {
+        method: 'POST',
+        body: formData
+      })
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(result) {
         if (result.success) {
           showStatus("데이터 새로고침 완료", "success");
           showSyncStatus("✅ 동기화 완료", "success");
@@ -432,16 +458,16 @@
           showStatus("새로고침 실패", "error");
           showSyncStatus("❌ 동기화 실패", "error");
         }
-        
-      } catch (error) {
+      })
+      .catch(function(error) {
         console.error('새로고침 실패:', error);
         showStatus("서버 연결 오류가 발생했습니다.", "error");
         showSyncStatus("❌ 연결 오류", "error");
-      }
+      });
     }
 
     function displayMembers(members) {
-      const tbody = document.getElementById('resultBody');
+      var tbody = document.getElementById('resultBody');
       tbody.innerHTML = '';
       
       if (!members || members.length === 0) {
@@ -449,15 +475,16 @@
         return;
       }
 
-      members.forEach(member => {
-        const row = document.createElement('tr');
+      for (var i = 0; i < members.length; i++) {
+        var member = members[i];
+        var row = document.createElement('tr');
         
         // 상태 계산
-        let statusHtml = '';
-        let remainingInfo = '';
+        var statusHtml = '';
+        var remainingInfo = '';
         
         if (member.type === '쿠폰') {
-          remainingInfo = `${member.remainingCount || 0}회`;
+          remainingInfo = (member.remainingCount || 0) + '회';
           if (member.remainingCount <= 0) {
             statusHtml = '<span class="status error">만료</span>';
           } else if (member.remainingCount <= 3) {
@@ -466,11 +493,11 @@
             statusHtml = '<span class="status success">정상</span>';
           }
         } else {
-          const endDate = new Date(member.endDate);
-          const today = new Date();
-          const diffDays = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
+          var endDate = new Date(member.endDate);
+          var today = new Date();
+          var diffDays = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
           
-          remainingInfo = `${diffDays}일`;
+          remainingInfo = diffDays + '일';
           if (diffDays <= 0) {
             statusHtml = '<span class="status error">만료</span>';
           } else if (diffDays <= 7) {
@@ -480,53 +507,65 @@
           }
         }
 
-        row.innerHTML = `
-          <td>${member.name}</td>
-          <td>${member.registrationDate || '-'}</td>
-          <td>${member.lastVisit || '-'}</td>
-          <td>${remainingInfo}</td>
-          <td>${statusHtml}</td>
-          <td>
-            <button class="btn-success" onclick="quickVisit('${member.name}')">출석</button>
-            <button class="btn-warning" onclick="editMember('${member.name}')">수정</button>
-          </td>
-        `;
+        row.innerHTML = 
+          '<td>' + member.name + '</td>' +
+          '<td>' + (member.registrationDate || '-') + '</td>' +
+          '<td>' + (member.lastVisit || '-') + '</td>' +
+          '<td>' + remainingInfo + '</td>' +
+          '<td>' + statusHtml + '</td>' +
+          '<td>' +
+            '<button class="btn-success" onclick="quickVisit(\'' + member.name + '\')">출석</button>' +
+            '<button class="btn-warning" onclick="editMember(\'' + member.name + '\')">수정</button>' +
+          '</td>';
         
         tbody.appendChild(row);
-      });
+      }
     }
 
-    async function quickVisit(name) {
-      if (!confirm(`${name} 고객의 출석을 처리하시겠습니까?`)) return;
+    function quickVisit(name) {
+      if (!confirm(name + " 고객의 출석을 처리하시겠습니까?")) return;
       
       setButtonsEnabled(false);
       showStatus("출석 처리 중...", "loading", true);
       
-      try {
-        const result = await callAPI('markVisit', { name: name });
-        
+      var formData = new FormData();
+      formData.append('action', 'markVisit');
+      formData.append('name', name);
+
+      fetch(API_URL, {
+        method: 'POST',
+        body: formData
+      })
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(result) {
         if (result.success) {
-          showStatus(`${name} 고객의 출석이 처리되었습니다.`, "success");
+          showStatus(name + " 고객의 출석이 처리되었습니다.", "success");
           showSyncStatus("✅ 구글 시트에 저장됨", "success");
           updateLastSync();
           
           // 현재 화면 새로고침
-          const searchValue = document.getElementById('search').value;
+          var searchValue = document.getElementById('search').value;
           if (searchValue) {
-            setTimeout(() => searchMember(), 500);
+            setTimeout(function() {
+              searchMember();
+            }, 500);
           } else {
-            setTimeout(() => loadAllMembers(), 500);
+            setTimeout(function() {
+              loadAllMembers();
+            }, 500);
           }
         } else {
-          showStatus(`출석 처리 실패: ${result.error || '알 수 없는 오류'}`, "error");
+          showStatus("출석 처리 실패: " + (result.error || '알 수 없는 오류'), "error");
         }
-        
-      } catch (error) {
+        setButtonsEnabled(true);
+      })
+      .catch(function(error) {
         console.error('출석 처리 실패:', error);
         showStatus("서버 연결 오류가 발생했습니다.", "error");
-      } finally {
         setButtonsEnabled(true);
-      }
+      });
     }
 
     function editMember(name) {
