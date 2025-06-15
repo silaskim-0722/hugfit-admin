@@ -36,58 +36,51 @@
       font-size: 14px; 
     }
     button:hover { opacity: 0.8; }
+    button:disabled { background-color: #cccccc; cursor: not-allowed; }
     .btn-primary { background: #007bff; color: white; }
     .btn-success { background: #28a745; color: white; }
     .btn-info { background: #17a2b8; color: white; }
     .btn-warning { background: #ffc107; color: #212529; }
     .btn-danger { background: #dc3545; color: white; }
     #statusMessage { margin: 10px 0; padding: 10px; border-radius: 4px; }
-    .data-management { 
+    .google-sheets-info { 
       margin: 20px 0; 
       padding: 15px; 
-      background: #e9ecef; 
+      background: #e7f3ff; 
       border-radius: 5px; 
+      border-left: 4px solid #007bff;
     }
-    textarea { 
-      width: 100%; 
-      height: 100px; 
-      margin: 10px 0; 
-      padding: 10px; 
-      border: 1px solid #ccc; 
-      border-radius: 4px; 
+    .loading-spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #f3f3f3;
+      border-top: 2px solid #3498db;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 8px;
     }
-    .export-import { 
-      display: flex; 
-      gap: 10px; 
-      align-items: center; 
-      justify-content: center; 
-      flex-wrap: wrap; 
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
     }
-    .github-info {
-      background: #f8f9fa;
-      border: 1px solid #dee2e6;
-      border-radius: 5px;
-      padding: 15px;
-      margin: 20px 0;
+    .sync-status {
       text-align: center;
-    }
-    .github-info h3 {
-      margin-top: 0;
-      color: #495057;
-    }
-    .github-info p {
       margin: 10px 0;
-      color: #6c757d;
+      padding: 10px;
+      border-radius: 4px;
+      font-weight: bold;
     }
   </style>
 </head>
 <body>
   <h2>허그핏 관리자 출석 페이지</h2>
 
-  <div class="github-info">
-    <h3>🚀 GitHub Pages 배포용 버전</h3>
-    <p>이 페이지는 GitHub Pages에서 호스팅될 수 있으며, 데이터는 JSON 파일로 백업/복원이 가능합니다.</p>
-    <p>여러 컴퓨터에서 사용하려면 데이터를 내보내기/가져오기 기능을 활용하세요.</p>
+  <div class="google-sheets-info">
+    <h3>📊 구글 스프레드시트 연동 버전</h3>
+    <p>모든 데이터는 구글 스프레드시트에 실시간으로 저장되며, 여러 기기에서 동시에 사용할 수 있습니다.</p>
+    <p><strong>마지막 동기화:</strong> <span id="lastSync">-</span></p>
+    <button class="btn-info" onclick="refreshData()">🔄 데이터 새로고침</button>
   </div>
 
   <div id="statusMessage" style="display: none;"></div>
@@ -108,31 +101,28 @@
       <select id="couponSelect">
         <option value="10회_1개월">한달 10회</option>
         <option value="30회_3개월">30회 3개월</option>
+        <option value="custom">직접입력</option>
       </select>
+      <input type="number" id="customCount" placeholder="횟수" style="display: none; width: 80px;">
     </span>
 
     <span id="periodOptions" style="display: none;">
       <select id="periodSelect">
         <option value="1개월">1개월</option>
         <option value="3개월">3개월</option>
+        <option value="6개월">6개월</option>
+        <option value="custom">직접입력</option>
       </select>
+      <input type="number" id="customPeriod" placeholder="개월" style="display: none; width: 80px;">
     </span>
 
-    <button class="btn-primary" onclick="registerCustomer()">고객 등록</button>
-    <button class="btn-success" onclick="markVisit()">출석 처리</button>
-    <button class="btn-info" onclick="loadAllMembers()">전체 회원 조회</button>
-    <button class="btn-success" onclick="loadTodayVisitors()" style="margin-left: 10px;">오늘 출석자</button>
+    <button class="btn-primary" onclick="registerCustomer()" id="registerBtn">고객 등록</button>
+    <button class="btn-success" onclick="markVisit()" id="visitBtn">출석 처리</button>
+    <button class="btn-info" onclick="loadAllMembers()" id="loadAllBtn">전체 회원 조회</button>
+    <button class="btn-success" onclick="loadTodayVisitors()" id="todayBtn">오늘 출석자</button>
   </div>
 
-  <div class="data-management">
-    <h3>데이터 관리</h3>
-    <div class="export-import">
-      <button class="btn-warning" onclick="exportData()">데이터 내보내기</button>
-      <button class="btn-info" onclick="importData()">데이터 가져오기</button>
-      <button class="btn-danger" onclick="clearAllData()" style="margin-left: 20px;">전체 데이터 삭제</button>
-    </div>
-    <textarea id="dataTextarea" placeholder="여기에 데이터를 붙여넣기하거나, 내보내기 버튼을 클릭하면 데이터가 표시됩니다."></textarea>
-  </div>
+  <div class="sync-status" id="syncStatus" style="display: none;"></div>
 
   <table>
     <thead>
@@ -149,421 +139,167 @@
   </table>
 
   <script>
+    // API URL
+    const API_URL = 'https://script.google.com/macros/s/AKfycbw3UXzSQbI6jIIVEbUYMCaHKQS4izqki9kJXO5oOORcKyid6tpofsFKtsE9K433IN2Ulw/exec';
+    
     // 상태 메시지 표시 함수
-    function showStatus(message, type = 'info') {
+    function showStatus(message, type = 'info', showSpinner = false) {
       const statusDiv = document.getElementById('statusMessage');
-      statusDiv.textContent = message;
+      const spinnerHtml = showSpinner ? '<div class="loading-spinner"></div>' : '';
+      statusDiv.innerHTML = spinnerHtml + message;
       statusDiv.className = `status ${type}`;
       statusDiv.style.display = 'block';
       
-      // 3초 후 자동 숨김
+      if (!showSpinner) {
+        setTimeout(() => {
+          statusDiv.style.display = 'none';
+        }, 3000);
+      }
+    }
+
+    // 동기화 상태 표시
+    function showSyncStatus(message, type = 'info') {
+      const syncDiv = document.getElementById('syncStatus');
+      syncDiv.textContent = message;
+      syncDiv.className = `sync-status ${type}`;
+      syncDiv.style.display = 'block';
+      
       setTimeout(() => {
-        statusDiv.style.display = 'none';
-      }, 3000);
+        syncDiv.style.display = 'none';
+      }, 2000);
+    }
+
+    // 마지막 동기화 시간 업데이트
+    function updateLastSync() {
+      const now = new Date();
+      const timeString = now.toLocaleTimeString('ko-KR');
+      document.getElementById('lastSync').textContent = timeString;
+    }
+
+    // API 호출 함수
+    async function callAPI(action, data = {}) {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: action,
+          ...data
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      return await response.json();
+    }
+
+    // 버튼 상태 제어
+    function setButtonsEnabled(enabled) {
+      const buttons = ['registerBtn', 'visitBtn', 'loadAllBtn', 'todayBtn'];
+      buttons.forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) {
+          btn.disabled = !enabled;
+        }
+      });
     }
 
     function toggleOptions() {
       const type = document.getElementById("regType").value;
       document.getElementById("couponOptions").style.display = type === '쿠폰' ? 'inline' : 'none';
       document.getElementById("periodOptions").style.display = type === '기간' ? 'inline' : 'none';
+      
+      // 커스텀 입력 필드 토글
+      toggleCustomInput();
     }
 
-    function registerCustomer() {
-      const name = prompt("등록할 고객명을 입력해주세요:");
-      if (!name) return;
-      
-      // 중복 확인
-      const key = `member_${name}`;
-      if (localStorage.getItem(key)) {
-        if (!confirm(`${name} 고객이 이미 등록되어 있습니다. 덮어쓰시겠습니까?`)) {
-          return;
-        }
-      }
-      
-      showStatus("고객 등록 중...", "loading");
-      
-      const now = new Date();
+    function toggleCustomInput() {
       const regType = document.getElementById("regType").value;
-
-      let info = {
-        name: name,
-        regDate: now.toISOString().split('T')[0],
-        lastVisit: '',
-        type: regType,
-        registeredAt: now.toISOString() // 등록 시점 추가
-      };
-
+      
       if (regType === '쿠폰') {
-        const val = document.getElementById("couponSelect").value;
-        const count = parseInt(val.split("회")[0]);
-        info.count = count;
-        info.originalCount = count; // 원래 횟수 저장
+        const couponValue = document.getElementById("couponSelect").value;
+        document.getElementById("customCount").style.display = couponValue === 'custom' ? 'inline' : 'none';
       } else {
-        const period = document.getElementById("periodSelect").value;
-        const days = parseInt(period.replace("개월", '')) * 30;
-        const expireDate = new Date(now.getTime() + days * 24*60*60*1000);
-        info.expire = expireDate.toISOString().split('T')[0];
+        const periodValue = document.getElementById("periodSelect").value;
+        document.getElementById("customPeriod").style.display = periodValue === 'custom' ? 'inline' : 'none';
       }
+    }
 
+    // 이벤트 리스너 등록
+    document.getElementById("couponSelect").addEventListener("change", toggleCustomInput);
+    document.getElementById("periodSelect").addEventListener("change", toggleCustomInput);
+
+    async function registerCustomer() {
+      const name = prompt("등록할 고객명을 입력해주세요:");
+      if (!name || !name.trim()) return;
+      
+      const trimmedName = name.trim();
+      
+      setButtonsEnabled(false);
+      showStatus("고객 등록 중...", "loading", true);
+      
       try {
-        localStorage.setItem(key, JSON.stringify(info));
-        showStatus(`${name} 고객 등록이 완료되었습니다.`, "success");
+        const regType = document.getElementById("regType").value;
+        let memberData = {
+          name: trimmedName,
+          type: regType
+        };
+
+        if (regType === '쿠폰') {
+          const couponValue = document.getElementById("couponSelect").value;
+          let count;
+          
+          if (couponValue === 'custom') {
+            count = parseInt(document.getElementById("customCount").value);
+            if (!count || count <= 0) {
+              showStatus("올바른 횟수를 입력해주세요.", "warning");
+              return;
+            }
+          } else {
+            count = parseInt(couponValue.split("회")[0]);
+          }
+          
+          memberData.count = count;
+        } else {
+          const periodValue = document.getElementById("periodSelect").value;
+          let months;
+          
+          if (periodValue === 'custom') {
+            months = parseInt(document.getElementById("customPeriod").value);
+            if (!months || months <= 0) {
+              showStatus("올바른 기간을 입력해주세요.", "warning");
+              return;
+            }
+          } else {
+            months = parseInt(periodValue.replace("개월", ''));
+          }
+          
+          memberData.months = months;
+        }
+
+        const result = await callAPI('registerMember', memberData);
         
-        // 검색 필드에 등록한 고객명 입력하고 자동 검색
-        document.getElementById("search").value = name;
-        setTimeout(() => searchMember(), 500);
+        if (result.success) {
+          showStatus(`${trimmedName} 고객 등록이 완료되었습니다.`, "success");
+          showSyncStatus("✅ 구글 시트에 저장됨", "success");
+          updateLastSync();
+          
+          // 등록 후 자동 검색
+          document.getElementById("search").value = trimmedName;
+          setTimeout(() => searchMember(), 500);
+        } else {
+          showStatus(`등록 실패: ${result.error || '알 수 없는 오류'}`, "error");
+        }
         
       } catch (error) {
         console.error('등록 실패:', error);
-        showStatus("등록 중 오류가 발생했습니다.", "error");
+        showStatus("서버 연결 오류가 발생했습니다.", "error");
+      } finally {
+        setButtonsEnabled(true);
       }
     }
 
-    function searchMember() {
-      const name = document.getElementById("search").value.trim();
-      const tbody = document.getElementById("resultBody");
-      tbody.innerHTML = '';
-
-      if (!name) {
-        showStatus("고객명을 입력해주세요.", "warning");
-        return;
-      }
-
-      const key = `member_${name}`;
-      const data = localStorage.getItem(key);
-      
-      if (!data) {
-        showStatus("등록된 고객 정보가 없습니다.", "warning");
-        return;
-      }
-
-      const info = JSON.parse(data);
-      displayMemberRow(info);
-    }
-
-    function displayMemberRow(info) {
-      const tbody = document.getElementById("resultBody");
-      const row = document.createElement("tr");
-      
-      // 만료 여부 확인
-      let statusText = '';
-      let statusClass = '';
-      
-      if (info.type === '쿠폰') {
-        statusText = info.count > 0 ? `${info.count}회 남음` : '사용완료';
-        statusClass = info.count > 0 ? 'success' : 'error';
-      } else {
-        const today = new Date();
-        const expireDate = new Date(info.expire);
-        const daysLeft = Math.ceil((expireDate - today) / (1000 * 60 * 60 * 24));
-        
-        if (daysLeft > 0) {
-          statusText = `${daysLeft}일 남음`;
-          statusClass = daysLeft > 7 ? 'success' : 'warning';
-        } else {
-          statusText = '기간만료';
-          statusClass = 'error';
-        }
-      }
-      
-      row.innerHTML = `
-        <td>${info.name}</td>
-        <td>${info.regDate}</td>
-        <td style="${info.lastVisit === new Date().toISOString().split('T')[0] ? 'background-color: #d4edda; font-weight: bold;' : ''}">${info.lastVisit || '-'}</td>
-        <td>${info.type === '쿠폰' ? `${info.count}회` : `~ ${info.expire}`}</td>
-        <td><span class="status ${statusClass}">${statusText}</span></td>
-        <td>
-          <button class="btn-danger" onclick="deleteMember('${info.name}')" style="font-size: 12px; padding: 4px 8px;">삭제</button>
-        </td>
-      `;
-      tbody.appendChild(row);
-    }
-
-    function markVisit() {
-      const name = document.getElementById("search").value.trim();
-      if (!name) {
-        showStatus("고객명을 입력해주세요.", "warning");
-        return;
-      }
-
-      const key = `member_${name}`;
-      const data = localStorage.getItem(key);
-      if (!data) {
-        showStatus("등록된 고객 정보가 없습니다.", "warning");
-        return;
-      }
-
-      const info = JSON.parse(data);
-      
-      // 사용 가능 여부 확인
-      if (info.type === '쿠폰' && info.count <= 0) {
-        showStatus("남은 횟수가 없습니다.", "error");
-        return;
-      }
-      
-      if (info.type === '기간') {
-        const today = new Date();
-        const expireDate = new Date(info.expire);
-        if (today > expireDate) {
-          showStatus("이용 기간이 만료되었습니다.", "error");
-          return;
-        }
-      }
-
-      showStatus("출석 처리 중...", "loading");
-      
-      const today = new Date().toISOString().split('T')[0];
-      info.lastVisit = today;
-
-      if (info.type === '쿠폰') {
-        if (info.count > 0) info.count--;
-      }
-
-      try {
-        localStorage.setItem(key, JSON.stringify(info));
-        showStatus(`${name} 고객의 출석 처리가 완료되었습니다.`, "success");
-        
-        // 자동으로 검색 결과 갱신
-        setTimeout(() => searchMember(), 500);
-        
-      } catch (error) {
-        console.error('출석 처리 실패:', error);
-        showStatus("출석 처리 중 오류가 발생했습니다.", "error");
-      }
-    }
-
-    function loadAllMembers() {
-      const tbody = document.getElementById("resultBody");
-      tbody.innerHTML = '';
-      
-      let hasMembers = false;
-      const members = [];
-      
-      // localStorage에서 모든 회원 정보 로드
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key.startsWith('member_')) {
-          const data = localStorage.getItem(key);
-          if (data) {
-            const info = JSON.parse(data);
-            members.push(info);
-            hasMembers = true;
-          }
-        }
-      }
-      
-      // 최근 방문일 기준으로 정렬 (최근 방문자 우선, 그 다음 이름순)
-      members.sort((a, b) => {
-        // 최근 방문일이 있는 경우 우선 정렬
-        if (a.lastVisit && b.lastVisit) {
-          return new Date(b.lastVisit) - new Date(a.lastVisit);
-        }
-        if (a.lastVisit && !b.lastVisit) return -1;
-        if (!a.lastVisit && b.lastVisit) return 1;
-        
-        // 둘 다 방문 기록이 없으면 이름순
-        return a.name.localeCompare(b.name);
-      });
-      
-      // 화면에 표시
-      members.forEach(info => displayMemberRow(info));
-      
-      if (!hasMembers) {
-        showStatus("등록된 회원이 없습니다.", "warning");
-      } else {
-        const todayVisitors = members.filter(m => m.lastVisit === new Date().toISOString().split('T')[0]).length;
-        showStatus(`총 ${members.length}명의 회원 (오늘 출석: ${todayVisitors}명)`, "success");
-      }
-    }
-
-    function deleteMember(name) {
-      if (!confirm(`${name} 고객 정보를 삭제하시겠습니까?`)) {
-        return;
-      }
-      
-      const key = `member_${name}`;
-      localStorage.removeItem(key);
-      showStatus(`${name} 고객 정보가 삭제되었습니다.`, "success");
-      
-      // 현재 검색된 고객이 삭제된 경우 목록 새로고침
-      if (document.getElementById("search").value.trim() === name) {
-        document.getElementById("search").value = '';
-        document.getElementById("resultBody").innerHTML = '';
-      } else {
-        loadAllMembers();
-      }
-    }
-
-    function exportData() {
-      const members = [];
-      
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key.startsWith('member_')) {
-          const data = localStorage.getItem(key);
-          if (data) {
-            members.push(JSON.parse(data));
-          }
-        }
-      }
-      
-      if (members.length === 0) {
-        showStatus("내보낼 데이터가 없습니다.", "warning");
-        return;
-      }
-      
-      const exportData = {
-        exportDate: new Date().toISOString(),
-        version: "1.0",
-        members: members
-      };
-      
-      const jsonString = JSON.stringify(exportData, null, 2);
-      document.getElementById('dataTextarea').value = jsonString;
-      
-      // 클립보드에 복사
-      navigator.clipboard.writeText(jsonString).then(() => {
-        showStatus(`${members.length}명의 데이터를 내보냈습니다. (클립보드에 복사됨)`, "success");
-      }).catch(() => {
-        showStatus(`${members.length}명의 데이터를 내보냈습니다.`, "success");
-      });
-    }
-
-    function importData() {
-      const jsonData = document.getElementById('dataTextarea').value.trim();
-      
-      if (!jsonData) {
-        showStatus("가져올 데이터를 입력해주세요.", "warning");
-        return;
-      }
-      
-      try {
-        const data = JSON.parse(jsonData);
-        
-        if (!data.members || !Array.isArray(data.members)) {
-          throw new Error("올바른 데이터 형식이 아닙니다.");
-        }
-        
-        let importCount = 0;
-        let skipCount = 0;
-        
-        data.members.forEach(member => {
-          const key = `member_${member.name}`;
-          
-          if (localStorage.getItem(key)) {
-            skipCount++;
-          } else {
-            localStorage.setItem(key, JSON.stringify(member));
-            importCount++;
-          }
-        });
-        
-        showStatus(`데이터 가져오기 완료: ${importCount}명 추가, ${skipCount}명 중복 건너뜀`, "success");
-        document.getElementById('dataTextarea').value = '';
-        
-      } catch (error) {
-        console.error('데이터 가져오기 실패:', error);
-        showStatus("데이터 형식이 올바르지 않습니다.", "error");
-      }
-    }
-
-    function clearAllData() {
-      if (!confirm("모든 회원 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
-        return;
-      }
-      
-      if (!confirm("정말로 모든 데이터를 삭제하시겠습니까?")) {
-        return;
-      }
-      
-      const keys = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key.startsWith('member_')) {
-          keys.push(key);
-        }
-      }
-      
-      keys.forEach(key => localStorage.removeItem(key));
-      
-      document.getElementById("resultBody").innerHTML = '';
-      document.getElementById("search").value = '';
-      
-      showStatus(`${keys.length}명의 데이터가 모두 삭제되었습니다.`, "success");
-    }
-
-    // 페이지 로드 시 초기화
-    window.onload = function() {
-      showStatus("허그핏 관리자 페이지가 로드되었습니다.", "success");
-      
-      // URL 파라미터에서 데이터 가져오기 (공유 기능)
-      const urlParams = new URLSearchParams(window.location.search);
-      const sharedData = urlParams.get('data');
-      if (sharedData) {
-        try {
-          document.getElementById('dataTextarea').value = decodeURIComponent(sharedData);
-          showStatus("공유된 데이터를 발견했습니다. '데이터 가져오기' 버튼을 클릭하세요.", "info");
-        } catch (e) {
-          console.error('공유 데이터 로드 실패:', e);
-        }
-      }
-    };
-
-    // 오늘 출석자만 조회
-    function loadTodayVisitors() {
-      const tbody = document.getElementById("resultBody");
-      tbody.innerHTML = '';
-      
-      const today = new Date().toISOString().split('T')[0];
-      const todayVisitors = [];
-      
-      // localStorage에서 오늘 출석한 회원만 필터링
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key.startsWith('member_')) {
-          const data = localStorage.getItem(key);
-          if (data) {
-            const info = JSON.parse(data);
-            if (info.lastVisit === today) {
-              todayVisitors.push(info);
-            }
-          }
-        }
-      }
-      
-      // 방문 시간순으로 정렬 (최신순)
-      todayVisitors.sort((a, b) => a.name.localeCompare(b.name));
-      
-      // 화면에 표시
-      todayVisitors.forEach(info => displayMemberRow(info));
-      
-      if (todayVisitors.length === 0) {
-        showStatus("오늘 출석한 회원이 없습니다.", "warning");
-      } else {
-        showStatus(`오늘 출석한 회원: ${todayVisitors.length}명`, "success");
-      }
-    }
-
-    // 키보드 단축키
-    document.addEventListener('keydown', function(e) {
-      // Ctrl+Enter: 출석 처리
-      if (e.ctrlKey && e.key === 'Enter') {
-        e.preventDefault();
-        markVisit();
-      }
-      // Ctrl+N: 고객 등록
-      if (e.ctrlKey && e.key === 'n') {
-        e.preventDefault();
-        registerCustomer();
-      }
-    });
-
-    // 검색창에서 Enter 키 처리
-    document.getElementById('search').addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') {
-        searchMember();
-      }
-    });
-  </script>
-</body>
-</html>
+    async function searchM
