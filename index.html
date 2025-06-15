@@ -178,22 +178,28 @@
 
     // API 호출 함수
     async function callAPI(action, data = {}) {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: action,
-          ...data
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            action: action,
+            ...data
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        return result;
+      } catch (error) {
+        console.error('API 호출 오류:', error);
+        throw error;
       }
-      
-      return await response.json();
     }
 
     // 버튼 상태 제어
@@ -256,6 +262,7 @@
             count = parseInt(document.getElementById("customCount").value);
             if (!count || count <= 0) {
               showStatus("올바른 횟수를 입력해주세요.", "warning");
+              setButtonsEnabled(true);
               return;
             }
           } else {
@@ -271,6 +278,7 @@
             months = parseInt(document.getElementById("customPeriod").value);
             if (!months || months <= 0) {
               showStatus("올바른 기간을 입력해주세요.", "warning");
+              setButtonsEnabled(true);
               return;
             }
           } else {
@@ -296,10 +304,247 @@
         
       } catch (error) {
         console.error('등록 실패:', error);
+        showStatus("서버 연결 오류가 발생했습니다. 잠시 후 다시 시도해주세요.", "error");
+      } finally {
+        setButtonsEnabled(true);
+      }
+    }
+
+    async function searchMember() {
+      const name = document.getElementById('search').value.trim();
+      if (!name) {
+        showStatus("검색할 고객명을 입력해주세요.", "warning");
+        return;
+      }
+
+      setButtonsEnabled(false);
+      showStatus("검색 중...", "loading", true);
+      
+      try {
+        const result = await callAPI('searchMember', { name: name });
+        
+        if (result.success) {
+          displayMembers(result.data);
+          showStatus(`"${name}" 검색 결과: ${result.data.length}명`, "success");
+          updateLastSync();
+        } else {
+          showStatus(`검색 실패: ${result.error || '알 수 없는 오류'}`, "error");
+        }
+        
+      } catch (error) {
+        console.error('검색 실패:', error);
         showStatus("서버 연결 오류가 발생했습니다.", "error");
       } finally {
         setButtonsEnabled(true);
       }
     }
 
-    async function searchM
+    async function markVisit() {
+      const name = prompt("출석 처리할 고객명을 입력해주세요:");
+      if (!name || !name.trim()) return;
+      
+      const trimmedName = name.trim();
+      
+      setButtonsEnabled(false);
+      showStatus("출석 처리 중...", "loading", true);
+      
+      try {
+        const result = await callAPI('markVisit', { name: trimmedName });
+        
+        if (result.success) {
+          showStatus(`${trimmedName} 고객의 출석이 처리되었습니다.`, "success");
+          showSyncStatus("✅ 구글 시트에 저장됨", "success");
+          updateLastSync();
+          
+          // 출석 처리 후 자동 검색
+          document.getElementById("search").value = trimmedName;
+          setTimeout(() => searchMember(), 500);
+        } else {
+          showStatus(`출석 처리 실패: ${result.error || '알 수 없는 오류'}`, "error");
+        }
+        
+      } catch (error) {
+        console.error('출석 처리 실패:', error);
+        showStatus("서버 연결 오류가 발생했습니다.", "error");
+      } finally {
+        setButtonsEnabled(true);
+      }
+    }
+
+    async function loadAllMembers() {
+      setButtonsEnabled(false);
+      showStatus("전체 회원 조회 중...", "loading", true);
+      
+      try {
+        const result = await callAPI('getAllMembers');
+        
+        if (result.success) {
+          displayMembers(result.data);
+          showStatus(`전체 회원: ${result.data.length}명`, "success");
+          updateLastSync();
+        } else {
+          showStatus(`조회 실패: ${result.error || '알 수 없는 오류'}`, "error");
+        }
+        
+      } catch (error) {
+        console.error('전체 회원 조회 실패:', error);
+        showStatus("서버 연결 오류가 발생했습니다.", "error");
+      } finally {
+        setButtonsEnabled(true);
+      }
+    }
+
+    async function loadTodayVisitors() {
+      setButtonsEnabled(false);
+      showStatus("오늘 출석자 조회 중...", "loading", true);
+      
+      try {
+        const result = await callAPI('getTodayVisitors');
+        
+        if (result.success) {
+          displayMembers(result.data);
+          showStatus(`오늘 출석자: ${result.data.length}명`, "success");
+          updateLastSync();
+        } else {
+          showStatus(`조회 실패: ${result.error || '알 수 없는 오류'}`, "error");
+        }
+        
+      } catch (error) {
+        console.error('오늘 출석자 조회 실패:', error);
+        showStatus("서버 연결 오류가 발생했습니다.", "error");
+      } finally {
+        setButtonsEnabled(true);
+      }
+    }
+
+    async function refreshData() {
+      showStatus("데이터 새로고침 중...", "loading", true);
+      showSyncStatus("🔄 동기화 중...", "loading");
+      
+      try {
+        const result = await callAPI('refreshData');
+        
+        if (result.success) {
+          showStatus("데이터 새로고침 완료", "success");
+          showSyncStatus("✅ 동기화 완료", "success");
+          updateLastSync();
+        } else {
+          showStatus("새로고침 실패", "error");
+          showSyncStatus("❌ 동기화 실패", "error");
+        }
+        
+      } catch (error) {
+        console.error('새로고침 실패:', error);
+        showStatus("서버 연결 오류가 발생했습니다.", "error");
+        showSyncStatus("❌ 연결 오류", "error");
+      }
+    }
+
+    function displayMembers(members) {
+      const tbody = document.getElementById('resultBody');
+      tbody.innerHTML = '';
+      
+      if (!members || members.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6">데이터가 없습니다.</td></tr>';
+        return;
+      }
+
+      members.forEach(member => {
+        const row = document.createElement('tr');
+        
+        // 상태 계산
+        let statusHtml = '';
+        let remainingInfo = '';
+        
+        if (member.type === '쿠폰') {
+          remainingInfo = `${member.remainingCount || 0}회`;
+          if (member.remainingCount <= 0) {
+            statusHtml = '<span class="status error">만료</span>';
+          } else if (member.remainingCount <= 3) {
+            statusHtml = '<span class="status warning">종료임박</span>';
+          } else {
+            statusHtml = '<span class="status success">정상</span>';
+          }
+        } else {
+          const endDate = new Date(member.endDate);
+          const today = new Date();
+          const diffDays = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
+          
+          remainingInfo = `${diffDays}일`;
+          if (diffDays <= 0) {
+            statusHtml = '<span class="status error">만료</span>';
+          } else if (diffDays <= 7) {
+            statusHtml = '<span class="status warning">종료임박</span>';
+          } else {
+            statusHtml = '<span class="status success">정상</span>';
+          }
+        }
+
+        row.innerHTML = `
+          <td>${member.name}</td>
+          <td>${member.registrationDate || '-'}</td>
+          <td>${member.lastVisit || '-'}</td>
+          <td>${remainingInfo}</td>
+          <td>${statusHtml}</td>
+          <td>
+            <button class="btn-success" onclick="quickVisit('${member.name}')">출석</button>
+            <button class="btn-warning" onclick="editMember('${member.name}')">수정</button>
+          </td>
+        `;
+        
+        tbody.appendChild(row);
+      });
+    }
+
+    async function quickVisit(name) {
+      if (!confirm(`${name} 고객의 출석을 처리하시겠습니까?`)) return;
+      
+      setButtonsEnabled(false);
+      showStatus("출석 처리 중...", "loading", true);
+      
+      try {
+        const result = await callAPI('markVisit', { name: name });
+        
+        if (result.success) {
+          showStatus(`${name} 고객의 출석이 처리되었습니다.`, "success");
+          showSyncStatus("✅ 구글 시트에 저장됨", "success");
+          updateLastSync();
+          
+          // 현재 화면 새로고침
+          const searchValue = document.getElementById('search').value;
+          if (searchValue) {
+            setTimeout(() => searchMember(), 500);
+          } else {
+            setTimeout(() => loadAllMembers(), 500);
+          }
+        } else {
+          showStatus(`출석 처리 실패: ${result.error || '알 수 없는 오류'}`, "error");
+        }
+        
+      } catch (error) {
+        console.error('출석 처리 실패:', error);
+        showStatus("서버 연결 오류가 발생했습니다.", "error");
+      } finally {
+        setButtonsEnabled(true);
+      }
+    }
+
+    function editMember(name) {
+      showStatus("회원 수정 기능은 개발 중입니다.", "info");
+    }
+
+    // 엔터키로 검색
+    document.getElementById('search').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        searchMember();
+      }
+    });
+
+    // 페이지 로드 시 초기화
+    window.onload = function() {
+      updateLastSync();
+      showStatus("관리자 페이지가 로드되었습니다. 구글 스프레드시트와 연동됩니다.", "info");
+    };
+  </script>
+</body>
+</html>
