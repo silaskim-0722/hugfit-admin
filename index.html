@@ -16,6 +16,7 @@
     }
     th { background-color: #f0f0f0; }
     .filter-area { margin-bottom: 20px; text-align: center; }
+
     .status { 
       padding: 5px 10px; 
       border-radius: 3px; 
@@ -26,7 +27,7 @@
     .error { background: #f8d7da; color: #721c24; }
     .warning { background: #fff3cd; color: #856404; }
     .loading { background: #d1ecf1; color: #0c5460; }
-    .info { background: #d1ecf1; color: #0c5460; }
+
     button { 
       padding: 8px 16px; 
       margin: 5px; 
@@ -36,61 +37,26 @@
       font-size: 14px; 
     }
     button:hover { opacity: 0.8; }
-    button:disabled { background-color: #cccccc; cursor: not-allowed; }
     .btn-primary { background: #007bff; color: white; }
     .btn-success { background: #28a745; color: white; }
     .btn-info { background: #17a2b8; color: white; }
-    .btn-warning { background: #ffc107; color: #212529; }
-    .btn-danger { background: #dc3545; color: white; }
+
     #statusMessage { margin: 10px 0; padding: 10px; border-radius: 4px; }
-    .google-sheets-info { 
-      margin: 20px 0; 
-      padding: 15px; 
-      background: #e7f3ff; 
-      border-radius: 5px; 
-      border-left: 4px solid #007bff;
-    }
-    .loading-spinner {
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      border: 2px solid #f3f3f3;
-      border-top: 2px solid #3498db;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-right: 8px;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    .sync-status {
-      text-align: center;
-      margin: 10px 0;
-      padding: 10px;
-      border-radius: 4px;
-      font-weight: bold;
-    }
   </style>
 </head>
 <body>
+
   <h2>허그핏 관리자 출석 페이지</h2>
-
-  <div class="google-sheets-info">
-    <h3>📊 구글 스프레드시트 연동 버전</h3>
-    <p>모든 데이터는 구글 스프레드시트에 실시간으로 저장되며, 여러 기기에서 동시에 사용할 수 있습니다.</p>
-    <p><strong>마지막 동기화:</strong> <span id="lastSync">-</span></p>
-    <button class="btn-info" onclick="refreshData()">🔄 데이터 새로고침</button>
-  </div>
-
-  <div id="statusMessage" style="display: none;"></div>
+  <div id="statusMessage" style="display:none;"></div>
 
   <div class="filter-area">
+
     <label for="search">고객 이름 검색:</label>
     <input type="text" id="search" placeholder="예: 김민정">
     <button class="btn-info" onclick="searchMember()">검색</button>
 
     <br><br>
+
     <label>등록 유형:</label>
     <select id="regType" onchange="toggleOptions()">
       <option value="쿠폰">쿠폰</option>
@@ -98,492 +64,216 @@
     </select>
 
     <span id="couponOptions">
-      <select id="couponSelect" onchange="toggleCustomInput()">
+      <select id="couponSelect">
         <option value="10회_1개월">한달 10회</option>
         <option value="30회_3개월">30회 3개월</option>
-        <option value="custom">직접입력</option>
       </select>
-      <input type="number" id="customCount" placeholder="횟수" style="display: none; width: 80px;">
     </span>
 
-    <span id="periodOptions" style="display: none;">
-      <select id="periodSelect" onchange="toggleCustomInput()">
+    <span id="periodOptions" style="display:none;">
+      <select id="periodSelect">
         <option value="1개월">1개월</option>
         <option value="3개월">3개월</option>
-        <option value="6개월">6개월</option>
-        <option value="custom">직접입력</option>
       </select>
-      <input type="number" id="customPeriod" placeholder="개월" style="display: none; width: 80px;">
     </span>
 
-    <button class="btn-primary" onclick="registerCustomer()" id="registerBtn">고객 등록</button>
-    <button class="btn-success" onclick="markVisit()" id="visitBtn">출석 처리</button>
-    <button class="btn-info" onclick="loadAllMembers()" id="loadAllBtn">전체 회원 조회</button>
-    <button class="btn-success" onclick="loadTodayVisitors()" id="todayBtn">오늘 출석자</button>
+    <button class="btn-primary" onclick="registerCustomer()">고객 등록</button>
+    <button class="btn-success" onclick="markVisit()">출석 처리</button>
+    <button class="btn-info" onclick="loadAllMembers()">전체 회원 조회</button>
   </div>
-
-  <div class="sync-status" id="syncStatus" style="display: none;"></div>
 
   <table>
     <thead>
       <tr>
         <th>고객명</th>
         <th>등록일자</th>
-        <th>최근방문일</th>
-        <th>남은횟수/기간</th>
+        <th>최근 방문일</th>
+        <th>남은 횟수/기간</th>
         <th>상태</th>
-        <th>관리</th>
       </tr>
     </thead>
     <tbody id="resultBody"></tbody>
   </table>
 
-  <script>
-    // 전역 변수
-    var API_URL = 'https://script.google.com/macros/s/AKfycbw3UXzSQbI6jIIVEbUYMCaHKQS4izqki9kJXO5oOORcKyid6tpofsFKtsE9K433IN2Ulw/exec';
-    
-    // 상태 메시지 표시 함수
-    function showStatus(message, type, showSpinner) {
-      var statusDiv = document.getElementById('statusMessage');
-      var spinnerHtml = showSpinner ? '<div class="loading-spinner"></div>' : '';
-      statusDiv.innerHTML = spinnerHtml + message;
-      statusDiv.className = 'status ' + (type || 'info');
-      statusDiv.style.display = 'block';
-      
-      if (!showSpinner) {
-        setTimeout(function() {
-          statusDiv.style.display = 'none';
-        }, 3000);
-      }
+<script>
+
+  // ⭐ 변경된 Google Web App URL
+  const SHEET_URL =
+    "https://script.google.com/macros/s/AKfycbxsa0wxqGaMwyz0QPrecdagFJid2VUxSuvKYRf67LP-zqrgiWtJECSxN-DYfErmI5dyOg/exec";
+
+  function showStatus(message, type = 'info') {
+    const el = document.getElementById("statusMessage");
+    el.textContent = message;
+    el.className = "status " + type;
+    el.style.display = "block";
+    setTimeout(() => el.style.display = "none", 3000);
+  }
+
+  function toggleOptions() {
+    const type = document.getElementById("regType").value;
+    document.getElementById("couponOptions").style.display = (type === "쿠폰") ? "inline" : "none";
+    document.getElementById("periodOptions").style.display = (type === "기간") ? "inline" : "none";
+  }
+
+  async function registerCustomer() {
+    const name = prompt("등록할 고객명을 입력해주세요:");
+    if (!name) return;
+
+    showStatus("고객 등록 중...", "loading");
+
+    const now = new Date();
+    const regType = document.getElementById("regType").value;
+
+    let info = {
+      name,
+      regDate: now.toISOString().split("T")[0],
+      lastVisit: "",
+      type: regType,
+      action: "register"
+    };
+
+    if (regType === "쿠폰") {
+      const val = document.getElementById("couponSelect").value;
+      info.count = parseInt(val.split("회")[0]);
+      info.status = `${info.count}회`;
+    } else {
+      const months = parseInt(document.getElementById("periodSelect").value.replace("개월",""));
+      const expire = new Date(now.getTime() + months * 30 * 24 * 60 * 60 * 1000);
+      info.expire = expire.toISOString().split("T")[0];
+      info.status = `~ ${info.expire}`;
     }
 
-    // 동기화 상태 표시
-    function showSyncStatus(message, type) {
-      var syncDiv = document.getElementById('syncStatus');
-      syncDiv.textContent = message;
-      syncDiv.className = 'sync-status ' + (type || 'info');
-      syncDiv.style.display = 'block';
-      
-      setTimeout(function() {
-        syncDiv.style.display = 'none';
-      }, 2000);
-    }
+    // local 저장
+    localStorage.setItem(`member_${name}`, JSON.stringify(info));
 
-    // 마지막 동기화 시간 업데이트
-    function updateLastSync() {
-      var now = new Date();
-      var timeString = now.toLocaleTimeString('ko-KR');
-      document.getElementById('lastSync').textContent = timeString;
-    }
-
-    // 버튼 상태 제어
-    function setButtonsEnabled(enabled) {
-      var buttons = ['registerBtn', 'visitBtn', 'loadAllBtn', 'todayBtn'];
-      for (var i = 0; i < buttons.length; i++) {
-        var btn = document.getElementById(buttons[i]);
-        if (btn) {
-          btn.disabled = !enabled;
-        }
-      }
-    }
-
-    function toggleOptions() {
-      var type = document.getElementById("regType").value;
-      document.getElementById("couponOptions").style.display = type === '쿠폰' ? 'inline' : 'none';
-      document.getElementById("periodOptions").style.display = type === '기간' ? 'inline' : 'none';
-      toggleCustomInput();
-    }
-
-    function toggleCustomInput() {
-      var regType = document.getElementById("regType").value;
-      
-      if (regType === '쿠폰') {
-        var couponValue = document.getElementById("couponSelect").value;
-        document.getElementById("customCount").style.display = couponValue === 'custom' ? 'inline' : 'none';
-      } else {
-        var periodValue = document.getElementById("periodSelect").value;
-        document.getElementById("customPeriod").style.display = periodValue === 'custom' ? 'inline' : 'none';
-      }
-    }
-
-    function registerCustomer() {
-      var name = prompt("등록할 고객명을 입력해주세요:");
-      if (!name || !name.trim()) return;
-      
-      var trimmedName = name.trim();
-      
-      setButtonsEnabled(false);
-      showStatus("고객 등록 중...", "loading", true);
-      
-      var regType = document.getElementById("regType").value;
-      var memberData = {
-        action: 'registerMember',
-        name: trimmedName,
-        type: regType
-      };
-
-      if (regType === '쿠폰') {
-        var couponValue = document.getElementById("couponSelect").value;
-        var count;
-        
-        if (couponValue === 'custom') {
-          count = parseInt(document.getElementById("customCount").value);
-          if (!count || count <= 0) {
-            showStatus("올바른 횟수를 입력해주세요.", "warning");
-            setButtonsEnabled(true);
-            return;
-          }
-        } else {
-          count = parseInt(couponValue.split("회")[0]);
-        }
-        
-        memberData.count = count;
-      } else {
-        var periodValue = document.getElementById("periodSelect").value;
-        var months;
-        
-        if (periodValue === 'custom') {
-          months = parseInt(document.getElementById("customPeriod").value);
-          if (!months || months <= 0) {
-            showStatus("올바른 기간을 입력해주세요.", "warning");
-            setButtonsEnabled(true);
-            return;
-          }
-        } else {
-          months = parseInt(periodValue.replace("개월", ''));
-        }
-        
-        memberData.months = months;
-      }
-
-      // 폼 데이터 생성
-      var formData = new FormData();
-      for (var key in memberData) {
-        formData.append(key, memberData[key]);
-      }
-
-      fetch(API_URL, {
-        method: 'POST',
-        body: formData
-      })
-      .then(function(response) {
-        return response.json();
-      })
-      .then(function(result) {
-        if (result.success) {
-          showStatus(trimmedName + " 고객 등록이 완료되었습니다.", "success");
-          showSyncStatus("✅ 구글 시트에 저장됨", "success");
-          updateLastSync();
-          
-          // 등록 후 자동 검색
-          document.getElementById("search").value = trimmedName;
-          setTimeout(function() {
-            searchMember();
-          }, 500);
-        } else {
-          showStatus("등록 실패: " + (result.error || '알 수 없는 오류'), "error");
-        }
-        setButtonsEnabled(true);
-      })
-      .catch(function(error) {
-        console.error('등록 실패:', error);
-        showStatus("서버 연결 오류가 발생했습니다. 잠시 후 다시 시도해주세요.", "error");
-        setButtonsEnabled(true);
-      });
-    }
-
-    function searchMember() {
-      var name = document.getElementById('search').value.trim();
-      if (!name) {
-        showStatus("검색할 고객명을 입력해주세요.", "warning");
-        return;
-      }
-
-      setButtonsEnabled(false);
-      showStatus("검색 중...", "loading", true);
-      
-      var formData = new FormData();
-      formData.append('action', 'searchMember');
-      formData.append('name', name);
-
-      fetch(API_URL, {
-        method: 'POST',
-        body: formData
-      })
-      .then(function(response) {
-        return response.json();
-      })
-      .then(function(result) {
-        if (result.success) {
-          displayMembers(result.data);
-          showStatus("\"" + name + "\" 검색 결과: " + result.data.length + "명", "success");
-          updateLastSync();
-        } else {
-          showStatus("검색 실패: " + (result.error || '알 수 없는 오류'), "error");
-        }
-        setButtonsEnabled(true);
-      })
-      .catch(function(error) {
-        console.error('검색 실패:', error);
-        showStatus("서버 연결 오류가 발생했습니다.", "error");
-        setButtonsEnabled(true);
-      });
-    }
-
-    function markVisit() {
-      var name = prompt("출석 처리할 고객명을 입력해주세요:");
-      if (!name || !name.trim()) return;
-      
-      var trimmedName = name.trim();
-      
-      setButtonsEnabled(false);
-      showStatus("출석 처리 중...", "loading", true);
-      
-      var formData = new FormData();
-      formData.append('action', 'markVisit');
-      formData.append('name', trimmedName);
-
-      fetch(API_URL, {
-        method: 'POST',
-        body: formData
-      })
-      .then(function(response) {
-        return response.json();
-      })
-      .then(function(result) {
-        if (result.success) {
-          showStatus(trimmedName + " 고객의 출석이 처리되었습니다.", "success");
-          showSyncStatus("✅ 구글 시트에 저장됨", "success");
-          updateLastSync();
-          
-          // 출석 처리 후 자동 검색
-          document.getElementById("search").value = trimmedName;
-          setTimeout(function() {
-            searchMember();
-          }, 500);
-        } else {
-          showStatus("출석 처리 실패: " + (result.error || '알 수 없는 오류'), "error");
-        }
-        setButtonsEnabled(true);
-      })
-      .catch(function(error) {
-        console.error('출석 처리 실패:', error);
-        showStatus("서버 연결 오류가 발생했습니다.", "error");
-        setButtonsEnabled(true);
-      });
-    }
-
-    function loadAllMembers() {
-      setButtonsEnabled(false);
-      showStatus("전체 회원 조회 중...", "loading", true);
-      
-      var formData = new FormData();
-      formData.append('action', 'getAllMembers');
-
-      fetch(API_URL, {
-        method: 'POST',
-        body: formData
-      })
-      .then(function(response) {
-        return response.json();
-      })
-      .then(function(result) {
-        if (result.success) {
-          displayMembers(result.data);
-          showStatus("전체 회원: " + result.data.length + "명", "success");
-          updateLastSync();
-        } else {
-          showStatus("조회 실패: " + (result.error || '알 수 없는 오류'), "error");
-        }
-        setButtonsEnabled(true);
-      })
-      .catch(function(error) {
-        console.error('전체 회원 조회 실패:', error);
-        showStatus("서버 연결 오류가 발생했습니다.", "error");
-        setButtonsEnabled(true);
-      });
-    }
-
-    function loadTodayVisitors() {
-      setButtonsEnabled(false);
-      showStatus("오늘 출석자 조회 중...", "loading", true);
-      
-      var formData = new FormData();
-      formData.append('action', 'getTodayVisitors');
-
-      fetch(API_URL, {
-        method: 'POST',
-        body: formData
-      })
-      .then(function(response) {
-        return response.json();
-      })
-      .then(function(result) {
-        if (result.success) {
-          displayMembers(result.data);
-          showStatus("오늘 출석자: " + result.data.length + "명", "success");
-          updateLastSync();
-        } else {
-          showStatus("조회 실패: " + (result.error || '알 수 없는 오류'), "error");
-        }
-        setButtonsEnabled(true);
-      })
-      .catch(function(error) {
-        console.error('오늘 출석자 조회 실패:', error);
-        showStatus("서버 연결 오류가 발생했습니다.", "error");
-        setButtonsEnabled(true);
-      });
-    }
-
-    function refreshData() {
-      showStatus("데이터 새로고침 중...", "loading", true);
-      showSyncStatus("🔄 동기화 중...", "loading");
-      
-      var formData = new FormData();
-      formData.append('action', 'refreshData');
-
-      fetch(API_URL, {
-        method: 'POST',
-        body: formData
-      })
-      .then(function(response) {
-        return response.json();
-      })
-      .then(function(result) {
-        if (result.success) {
-          showStatus("데이터 새로고침 완료", "success");
-          showSyncStatus("✅ 동기화 완료", "success");
-          updateLastSync();
-        } else {
-          showStatus("새로고침 실패", "error");
-          showSyncStatus("❌ 동기화 실패", "error");
-        }
-      })
-      .catch(function(error) {
-        console.error('새로고침 실패:', error);
-        showStatus("서버 연결 오류가 발생했습니다.", "error");
-        showSyncStatus("❌ 연결 오류", "error");
-      });
-    }
-
-    function displayMembers(members) {
-      var tbody = document.getElementById('resultBody');
-      tbody.innerHTML = '';
-      
-      if (!members || members.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6">데이터가 없습니다.</td></tr>';
-        return;
-      }
-
-      for (var i = 0; i < members.length; i++) {
-        var member = members[i];
-        var row = document.createElement('tr');
-        
-        // 상태 계산
-        var statusHtml = '';
-        var remainingInfo = '';
-        
-        if (member.type === '쿠폰') {
-          remainingInfo = (member.remainingCount || 0) + '회';
-          if (member.remainingCount <= 0) {
-            statusHtml = '<span class="status error">만료</span>';
-          } else if (member.remainingCount <= 3) {
-            statusHtml = '<span class="status warning">종료임박</span>';
-          } else {
-            statusHtml = '<span class="status success">정상</span>';
-          }
-        } else {
-          var endDate = new Date(member.endDate);
-          var today = new Date();
-          var diffDays = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
-          
-          remainingInfo = diffDays + '일';
-          if (diffDays <= 0) {
-            statusHtml = '<span class="status error">만료</span>';
-          } else if (diffDays <= 7) {
-            statusHtml = '<span class="status warning">종료임박</span>';
-          } else {
-            statusHtml = '<span class="status success">정상</span>';
-          }
-        }
-
-        row.innerHTML = 
-          '<td>' + member.name + '</td>' +
-          '<td>' + (member.registrationDate || '-') + '</td>' +
-          '<td>' + (member.lastVisit || '-') + '</td>' +
-          '<td>' + remainingInfo + '</td>' +
-          '<td>' + statusHtml + '</td>' +
-          '<td>' +
-            '<button class="btn-success" onclick="quickVisit(\'' + member.name + '\')">출석</button>' +
-            '<button class="btn-warning" onclick="editMember(\'' + member.name + '\')">수정</button>' +
-          '</td>';
-        
-        tbody.appendChild(row);
-      }
-    }
-
-    function quickVisit(name) {
-      if (!confirm(name + " 고객의 출석을 처리하시겠습니까?")) return;
-      
-      setButtonsEnabled(false);
-      showStatus("출석 처리 중...", "loading", true);
-      
-      var formData = new FormData();
-      formData.append('action', 'markVisit');
-      formData.append('name', name);
-
-      fetch(API_URL, {
-        method: 'POST',
-        body: formData
-      })
-      .then(function(response) {
-        return response.json();
-      })
-      .then(function(result) {
-        if (result.success) {
-          showStatus(name + " 고객의 출석이 처리되었습니다.", "success");
-          showSyncStatus("✅ 구글 시트에 저장됨", "success");
-          updateLastSync();
-          
-          // 현재 화면 새로고침
-          var searchValue = document.getElementById('search').value;
-          if (searchValue) {
-            setTimeout(function() {
-              searchMember();
-            }, 500);
-          } else {
-            setTimeout(function() {
-              loadAllMembers();
-            }, 500);
-          }
-        } else {
-          showStatus("출석 처리 실패: " + (result.error || '알 수 없는 오류'), "error");
-        }
-        setButtonsEnabled(true);
-      })
-      .catch(function(error) {
-        console.error('출석 처리 실패:', error);
-        showStatus("서버 연결 오류가 발생했습니다.", "error");
-        setButtonsEnabled(true);
-      });
-    }
-
-    function editMember(name) {
-      showStatus("회원 수정 기능은 개발 중입니다.", "info");
-    }
-
-    // 엔터키로 검색
-    document.getElementById('search').addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') {
-        searchMember();
-      }
+    // Google Sheet 전송
+    await fetch(SHEET_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(info)
     });
 
-    // 페이지 로드 시 초기화
-    window.onload = function() {
-      updateLastSync();
-      showStatus("관리자 페이지가 로드되었습니다. 구글 스프레드시트와 연동됩니다.", "info");
-    };
-  </script>
+    showStatus("등록 완료되었습니다.", "success");
+    document.getElementById("search").value = name;
+    searchMember();
+  }
+
+  function searchMember() {
+    const name = document.getElementById("search").value.trim();
+    const tbody = document.getElementById("resultBody");
+    tbody.innerHTML = "";
+
+    if (!name) return showStatus("고객명을 입력해주세요.", "warning");
+
+    const data = localStorage.getItem(`member_${name}`);
+    if (!data) return showStatus("등록된 고객이 없습니다.", "warning");
+
+    displayMemberRow(JSON.parse(data));
+  }
+
+  function displayMemberRow(info) {
+    const tbody = document.getElementById("resultBody");
+    const row = document.createElement("tr");
+
+    let statusText = "";
+    let statusClass = "";
+
+    if (info.type === "쿠폰") {
+      statusText = info.count > 0 ? `${info.count}회 남음` : "사용완료";
+      statusClass = info.count > 0 ? "success" : "error";
+    } else {
+      const today = new Date();
+      const expireDate = new Date(info.expire);
+      const diff = Math.ceil((expireDate - today) / (1000 * 60 * 60 * 24));
+      statusText = diff >= 0 ? `${diff}일 남음` : "기간 만료";
+      statusClass = diff >= 0 ? "success" : "error";
+    }
+
+    row.innerHTML = `
+      <td>${info.name}</td>
+      <td>${info.regDate}</td>
+      <td>${info.lastVisit || "-"}</td>
+      <td>${info.type === "쿠폰" ? info.count + "회" : "~ " + info.expire}</td>
+      <td><span class="status ${statusClass}">${statusText}</span></td>
+    `;
+    tbody.appendChild(row);
+  }
+
+  async function markVisit() {
+    const name = document.getElementById("search").value.trim();
+    if (!name) return showStatus("고객명을 입력해주세요.", "warning");
+
+    const key = `member_${name}`;
+    const data = localStorage.getItem(key);
+    if (!data) return showStatus("등록된 고객이 없습니다.", "warning");
+
+    const info = JSON.parse(data);
+    const today = new Date().toISOString().split("T")[0];
+
+    // ⭐ 중복 출석 체크 방지
+    if (info.lastVisit === today) {
+      return showStatus("이미 오늘 출석 처리되었습니다.", "warning");
+    }
+
+    // 쿠폰 남은 횟수 확인
+    if (info.type === "쿠폰" && info.count <= 0) {
+      return showStatus("남은 횟수가 없습니다.", "error");
+    }
+
+    // 기간 만료 확인
+    if (info.type === "기간") {
+      if (new Date() > new Date(info.expire)) {
+        return showStatus("기간이 만료되었습니다.", "error");
+      }
+    }
+
+    showStatus("출석 반영 중...", "loading");
+
+    info.lastVisit = today;
+
+    if (info.type === "쿠폰") info.count--;
+
+    // local 저장
+    localStorage.setItem(key, JSON.stringify(info));
+
+    // Google Sheets 업데이트
+    await fetch(SHEET_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...info,
+        action: "visit",
+        status: info.type === "쿠폰" ? `${info.count}회` : `~ ${info.expire}`
+      })
+    });
+
+    showStatus("출석이 정상 처리되었습니다.", "success");
+    searchMember();
+  }
+
+  function loadAllMembers() {
+    const tbody = document.getElementById("resultBody");
+    tbody.innerHTML = "";
+
+    let found = false;
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+
+      if (key.startsWith("member_")) {
+        displayMemberRow(JSON.parse(localStorage.getItem(key)));
+        found = true;
+      }
+    }
+
+    if (!found) showStatus("등록된 회원이 없습니다.", "warning");
+    else showStatus("전체 목록 불러오기 완료되었습니다.", "success");
+  }
+
+  window.onload = () => showStatus("허그핏 관리자 페이지 로드 완료", "success");
+
+</script>
 </body>
 </html>
